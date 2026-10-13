@@ -1,5 +1,6 @@
 // Fonction Netlify : analyse des matchs et pronostics (modèle de Poisson).
-// Données : football-data.org. La clé d'API reste côté serveur (variable FOOTBALL_DATA_API_KEY).
+// Données : football-data.org (FOOTBALL_DATA_API_KEY) et API-Football (API_FOOTBALL_KEY).
+// Les clés restent côté serveur, jamais dans la page.
 
 const BASE_URL = "https://api.football-data.org/v4";
 const COMPETITIONS = ["PL", "FL1", "CL", "PD", "SA", "BL1", "ELC", "DED", "PPL", "BSA"];
@@ -38,6 +39,59 @@ async function loadMatches(code, key, now) {
     matches = matches.concat(previous.matches);
   } catch {
     /* facultatif */
+  }
+  return matches;
+}
+
+
+// ---------- API-Football (championnats absents de football-data.org) ----------
+const AF_URL = "https://v3.football.api-sports.io";
+// Identifiants de ligue API-Football. Vérifiez-les dans votre tableau de bord si une ligue reste vide.
+const AF_LEAGUES = new Set([3, 848, 62, 141, 79, 136, 144, 179, 203, 218, 207, 197, 119, 106, 345, 333, 113, 103]);
+const AF_CALENDAR = new Set([113, 103]); // saisons sur l'année civile (Allsvenskan, Eliteserien)
+const AF_FINISHED = new Set(["FT", "AET", "PEN"]);
+const AF_UPCOMING = new Set(["NS", "TBD"]);
+
+async function afGet(params, key) {
+  const url = new URL(AF_URL + "/fixtures");
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const r = await fetch(url, { headers: { "x-apisports-key": key } });
+  if (r.status === 429) throw new ApiError(429, "Limite de requêtes API-Football atteinte. Réessayez plus tard.");
+  if (!r.ok) throw new ApiError(r.status, `Erreur API-Football (${r.status}).`);
+  const d = await r.json();
+  const errors = d.errors && !Array.isArray(d.errors) ? d.errors : {};
+  if (errors.requests || errors.rateLimit) {
+    throw new ApiError(429, "Limite de requêtes API-Football atteinte (100 par jour en offre gratuite).");
+  }
+  const messages = Object.values(errors);
+  if (messages.length) throw new ApiError(403, `API-Football : ${messages.join(" ")}`);
+  return d.response ?? [];
+}
+
+// Met les matchs d'API-Football dans le même format que football-data.org.
+function normalizeAF(fx) {
+  const short = fx.fixture.status.short;
+  const ft = fx.score?.fulltime ?? {};
+  return {
+    status: AF_FINISHED.has(short) ? "FINISHED" : AF_UPCOMING.has(short) ? "SCHEDULED" : "OTHER",
+    utcDate: fx.fixture.date,
+    homeTeam: { id: fx.teams.home.id, name: fx.teams.home.name },
+    awayTeam: { id: fx.teams.away.id, name: fx.teams.away.name },
+    score: { fullTime: { home: ft.home ?? fx.goals?.home ?? null, away: ft.away ?? fx.goals?.away ?? null } },
+  };
+}
+
+async function loadMatchesAF(leagueId, key, now) {
+  const year = now.getUTCFullYear();
+  const season = AF_CALENDAR.has(leagueId) ? year : now.getUTCMonth() >= 6 ? year : year - 1;
+  let matches = (await afGet({ league: leagueId, season }, key)).map(normalizeAF);
+  // Début de saison : on ajoute la saison précédente (1 requête de plus) pour avoir du recul.
+  if (matches.filter((m) => m.status === "FINISHED").length < 40) {
+    try {
+      matches = matches.concat((await afGet({ league: leagueId, season: season - 1 }, key)).map(normalizeAF));
+    } catch {
+      /* facultatif : la saison précédente peut être refusée par l'offre gratuite */
+    }
   }
   return matches;
 }
@@ -177,15 +231,25 @@ function json(body, status = 200, extra = {}) {
 
 export default async (req) => {
   const code = new URL(req.url).searchParams.get("c") || "PL";
-  if (!COMPETITIONS.includes(code)) return json({ error: "Compétition inconnue." }, 400);
-  const key = process.env.FOOTBALL_DATA_API_KEY;
+  const af = /^AF(\d+)$/.exec(code);
+  const afId = af ? Number(af[1]) : null;
+  const known = afId ? AF_LEAGUES.has(afId) : COMPETITIONS.includes(code);
+  if (!known) return json({ error: "Compétition inconnue." }, 400);
+  const key = afId ? process.env.API_FOOTBALL_KEY : process.env.FOOTBALL_DATA_API_KEY;
   if (!key) {
-    return json({ error: "Clé d'API manquante : ajoutez FOOTBALL_DATA_API_KEY dans les variables d'environnement Netlify." }, 500);
+    const name = afId ? "API_FOOTBALL_KEY" : "FOOTBALL_DATA_API_KEY";
+    return json({ error: `Clé d'API manquante : ajoutez ${name} dans les variables d'environnement Netlify.` }, 500);
   }
   try {
     const now = new Date();
-    const results = analyze(await loadMatches(code, key, now), now);
-    return json({ results }, 200, { "Cache-Control": "public, max-age=600" });
+    const matches = afId ? await loadMatchesAF(afId, key, now) : await loadMatches(code, key, now);
+    const results = analyze(matches, now);
+    // Cache plus long pour API-Football afin d'économiser les 100 requêtes quotidiennes.
+    const ttl = afId ? 10800 : 600;
+    return json({ results }, 200, {
+      "Cache-Control": "public, max-age=600",
+      "Netlify-CDN-Cache-Control": `public, max-age=${ttl}, stale-while-revalidate=86400`,
+    });
   } catch (e) {
     if (e instanceof ApiError) return json({ error: e.message }, e.status);
     return json({ error: "Impossible de joindre le service de données. Réessayez plus tard." }, 502);
