@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pronostics football</title>
+<style>
+:root{--bg:#eef2ee;--card:#fff;--ink:#13261b;--mute:#5d6f64;--line:#d5ddd7;
+--home:#1f6b45;--draw:#a9b3ac;--away:#c4452e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+font:16px/1.5 "Archivo",system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.6rem;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 16px}
+.pick{display:block;margin-bottom:20px;font-weight:700}
+.pick select{display:block;width:100%;margin-top:6px;padding:12px;font:inherit;font-weight:400;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+a:focus-visible{outline:3px solid #e0a800;outline-offset:2px}
+.match{background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:16px;margin-bottom:14px}
+.teams{display:flex;justify-content:space-between;gap:8px;font-weight:700;font-size:1.05rem}
+.when{color:var(--mute);font-size:.9rem;margin:2px 0 12px}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden}
+.bar span:nth-child(1){background:var(--home)}
+.bar span:nth-child(2){background:var(--draw)}
+.bar span:nth-child(3){background:var(--away)}
+.pcts{display:flex;justify-content:space-between;margin-top:6px;font-size:.9rem}
+.pcts b{display:block;font-size:1.1rem}
+.pcts div:nth-child(2){text-align:center}.pcts div:nth-child(3){text-align:right}
+.verdict{margin:14px 0 8px;font-weight:700}
+.verdict small{font-weight:400;color:var(--mute)}
+dl{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:0;font-size:.92rem}
+dt{color:var(--mute)}dd{margin:0;text-align:right}
+.forms{margin-top:12px;font-size:.9rem}
+.badge{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;
+border-radius:4px;color:#fff;font-size:.75rem;font-weight:700;margin-right:2px}
+.V{background:var(--home)}.N{background:var(--draw);color:var(--ink)}.D{background:var(--away)}
+.h2h{margin:10px 0 0;padding:0;list-style:none;font-size:.85rem;color:var(--mute)}
+.err{background:#fbeae6;border:1px solid var(--away);border-radius:8px;padding:12px}
+footer{color:var(--mute);font-size:.85rem;margin-top:24px}
+</style></head><body><main>
+<h1>Pronostics football</h1>
+<p class="sub">Estimations statistiques tirées des résultats récents. Ce ne sont pas des certitudes.</p>
+<label class="pick">Championnat<select id="comp"></select></label>
+<div id="out"><p>Chargement…</p></div>
+<footer>Une cote équivalente est la cote « juste » selon le modèle. Si la cote proposée est plus basse, le pari n'a pas d'intérêt statistique. Aucun modèle ne garantit de gain : ne pariez que ce que vous pouvez perdre.</footer>
+</main>
+<script>
+const GROUPS = {
+  "Principaux championnats": {PL:"Premier League",FL1:"Ligue 1",CL:"Ligue des champions",PD:"La Liga",SA:"Serie A",BL1:"Bundesliga",ELC:"Championship",DED:"Eredivisie",PPL:"Liga Portugal",BSA:"Brasileirão"},
+  "Coupes européennes": {AF3:"Ligue Europa",AF848:"Ligue Conférence"},
+  "Autres championnats": {AF62:"Ligue 2",AF141:"LaLiga 2",AF79:"Bundesliga 2",AF136:"Serie B",AF144:"Pro League (Belgique)",AF179:"Premiership (Écosse)",AF203:"Süper Lig (Turquie)",AF218:"Bundesliga (Autriche)",AF207:"Super League (Suisse)",AF197:"Super League (Grèce)",AF119:"Superliga (Danemark)",AF106:"Ekstraklasa (Pologne)",AF345:"Liga tchèque",AF333:"Premier League (Ukraine)",AF113:"Allsvenskan (Suède)",AF103:"Eliteserien (Norvège)"}
+};
+const COMPS = Object.assign({}, ...Object.values(GROUPS));
+const asked = new URLSearchParams(location.search).get("c");
+const code = asked in COMPS ? asked : "PL";
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (x) => Math.round(x * 100);
+const when = (iso) => new Date(iso).toLocaleString("fr-FR", {weekday:"short", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+const badges = (f) => f.length ? f.map((x) => `<span class="badge ${x}">${x}</span>`).join("") : "pas de données";
+
+const sel = document.getElementById("comp");
+sel.innerHTML = Object.entries(GROUPS).map(([g, items]) =>
+  `<optgroup label="${esc(g)}">${Object.entries(items).map(([c, n]) => `<option value="${c}"${c === code ? " selected" : ""}>${esc(n)}</option>`).join("")}</optgroup>`).join("");
+sel.addEventListener("change", () => { location.search = "?c=" + sel.value; });
+
+function card(m) {
+  const p = m.p;
+  return `<section class="match">
+<div class="teams"><span>${esc(m.home)}</span><span>${esc(m.away)}</span></div>
+<div class="when">${esc(when(m.date))}</div>
+<div class="bar" role="img" aria-label="Probabilités"><span style="width:${(p.home*100).toFixed(1)}%"></span><span style="width:${(p.draw*100).toFixed(1)}%"></span><span style="width:${(p.away*100).toFixed(1)}%"></span></div>
+<div class="pcts"><div><b>${pct(p.home)} %</b>Domicile</div><div><b>${pct(p.draw)} %</b>Nul</div><div><b>${pct(p.away)} %</b>Extérieur</div></div>
+<p class="verdict">${esc(m.label)} <small>(${esc(m.level)})</small></p>
+<dl>
+<dt>Buts attendus</dt><dd>${m.lamH.toFixed(1)} - ${m.lamA.toFixed(1)}</dd>
+<dt>Score le plus probable</dt><dd>${esc(p.score)}</dd>
+<dt>Plus de 2,5 buts</dt><dd>${pct(p.over25)} %</dd>
+<dt>Les deux équipes marquent</dt><dd>${pct(p.btts)} %</dd>
+<dt>Cotes équivalentes (1 / N / 2)</dt><dd>${m.odds.home.toFixed(2)} / ${m.odds.draw.toFixed(2)} / ${m.odds.away.toFixed(2)}</dd>
+</dl>
+<div class="forms"><div>${esc(m.home)} : ${badges(m.formH)}</div><div>${esc(m.away)} : ${badges(m.formA)}</div></div>
+${m.h2h.length ? `<ul class="h2h">${m.h2h.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>` : ""}
+</section>`;
+}
+
+fetch(`/.netlify/functions/pronostics?c=${code}`)
+  .then((r) => r.json())
+  .then((d) => {
+    const out = document.getElementById("out");
+    if (d.error) out.innerHTML = `<p class="err">${esc(d.error)}</p>`;
+    else if (!d.results.length) out.innerHTML = "<p>Aucun match à venir trouvé pour cette compétition.</p>";
+    else out.innerHTML = d.results.map(card).join("");
+  })
+  .catch(() => {
+    document.getElementById("out").innerHTML = '<p class="err">Impossible de charger les données. Vérifiez votre connexion.</p>';
+  });
+</script></body></html>
