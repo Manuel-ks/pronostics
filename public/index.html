@@ -46,7 +46,7 @@ footer{color:var(--mute);font-size:.85rem;margin-top:24px}
 <footer>Une cote équivalente est la cote « juste » selon le modèle. Si la cote proposée est plus basse, le pari n'a pas d'intérêt statistique. Aucun modèle ne garantit de gain : ne pariez que ce que vous pouvez perdre.</footer>
 </main>
 <script>
-const COMPS = {PL:"Premier League",FL1:"Ligue 1",CL:"Ligue des champions",PD:"La Liga",SA:"Serie A",BL1:"Bundesliga"};
+const COMPS = {PL:"Premier League",FL1:"Ligue 1",CL:"Ligue des champions",PD:"La Liga",SA:"Serie A",BL1:"Bundesliga"je,ELC:"Championship",DED:"Eredivisie",PPL:"Liga Portugal",BSA:"Brasileirão"};
 const asked = new URLSearchParams(location.search).get("c");
 const code = asked in COMPS ? asked : "PL";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
