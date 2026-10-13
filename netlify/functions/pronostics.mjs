@@ -2,7 +2,7 @@
 // Données : football-data.org. La clé d'API reste côté serveur (variable FOOTBALL_DATA_API_KEY).
 
 const BASE_URL = "https://api.football-data.org/v4";
-const COMPETITIONS = ["PL", "FL1", "CL", "PD", "SA", "BL1"];
+const COMPETITIONS = ["PL", "FL1", "CL", "PD", "SA", "BL1", "ELC", "DED", "PPL", "BSA"];
 const HALF_LIFE_DAYS = 90; // un match vieux de 90 jours compte deux fois moins
 const PRIOR_MATCHES = 4; // poids de la moyenne du championnat
 const MAX_GOALS = 8;
