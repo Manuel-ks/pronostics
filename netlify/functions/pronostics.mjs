@@ -6,7 +6,7 @@ const COMPETITIONS = ["PL", "FL1", "CL", "PD", "SA", "BL1"];
 const HALF_LIFE_DAYS = 90; // un match vieux de 90 jours compte deux fois moins
 const PRIOR_MATCHES = 4; // poids de la moyenne du championnat
 const MAX_GOALS = 8;
-const MATCHES_SHOWN = 10;
+const MATCHES_SHOWN = 60;
 
 class ApiError extends Error {
   constructor(status, message) {
